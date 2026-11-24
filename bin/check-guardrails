@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# check-guardrails — human/CI-facing dry-run of the guardrail rules that
+# .githooks/pre-commit and .githooks/pre-push enforce. Reports what the hooks
+# would block right now, without actually committing or pushing anything.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/scripts/lib/guardrails.sh"
+
+FAIL=0
+branch="$(guardrail_current_branch)"
+
+echo "== Guardrail check =="
+echo "Current branch: $branch"
+
+if guardrail_is_protected_branch "$branch"; then
+  echo "WARN  On protected branch '$branch' — direct commits/pushes here require"
+  echo "      AGENTIC_ALLOW_MAIN_COMMIT=1 / AGENTIC_ALLOW_MAIN_PUSH=1 respectively."
+else
+  echo "OK    Not on a protected branch."
+fi
+
+echo
+echo "== Hooks installed =="
+hooks_path="$(git -C "$ROOT" config --get core.hooksPath || true)"
+if [[ "$hooks_path" == ".githooks" ]]; then
+  echo "OK    core.hooksPath is set to .githooks"
+else
+  echo "FAIL  core.hooksPath is not '.githooks' (got: '${hooks_path:-<unset>}')"
+  echo "      Run scripts/install-aliases.sh to install it."
+  FAIL=1
+fi
+
+echo
+echo "== SKILL.md frontmatter =="
+if "$ROOT/scripts/validate-skills.sh"; then
+  echo "OK    All SKILL.md files valid."
+else
+  FAIL=1
+fi
+
+echo
+if [[ "$FAIL" -eq 0 ]]; then
+  echo "PASS: no guardrail violations detected."
+else
+  echo "FAIL: see above."
+fi
+exit "$FAIL"

@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# pre-push guardrail hook. Installed via `git config core.hooksPath .githooks`
+# (see scripts/install-aliases.sh). Blocks:
+#   1. Force / non-fast-forward pushes, without explicit human override.
+#   2. Direct pushes to a protected branch, without explicit human override.
+#
+# Git calls this with remote name/URL as args and feeds
+# "<local-ref> <local-sha> <remote-ref> <remote-sha>" lines on stdin, one per
+# ref being pushed.
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+source "$ROOT/scripts/lib/guardrails.sh"
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [[ -z "$local_ref" ]] && continue
+
+  remote_branch="${remote_ref#refs/heads/}"
+
+  if guardrail_is_force_push "$remote_sha" "$local_sha" && [[ "${AGENTIC_ALLOW_FORCE_PUSH:-0}" != "1" ]]; then
+    echo "BLOCKED: force/non-fast-forward push to '$remote_branch' rejected." >&2
+    echo "This rewrites remote history other clones may depend on." >&2
+    echo "If a human has explicitly approved this, re-run with AGENTIC_ALLOW_FORCE_PUSH=1." >&2
+    exit 1
+  fi
+
+  if guardrail_is_protected_branch "$remote_branch" && [[ "${AGENTIC_ALLOW_MAIN_PUSH:-0}" != "1" ]]; then
+    echo "BLOCKED: direct push to protected branch '$remote_branch' rejected." >&2
+    echo "Push a feature branch and open a PR instead." >&2
+    echo "If a human has explicitly approved a direct push, re-run with AGENTIC_ALLOW_MAIN_PUSH=1." >&2
+    exit 1
+  fi
+done
+
+exit 0

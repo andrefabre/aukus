@@ -1,0 +1,36 @@
+[project]
+name = "disp-evidence"
+version = "0.1.0"
+description = "DISP Continuous Evidence Plumbing - local demo prototype"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.9",
+    "pydantic>=2.6",
+    "cryptography>=42",
+    "fpdf2>=2.7",
+]
+
+[project.optional-dependencies]
+# TestClient in current Starlette needs httpx2.
+dev = ["pytest>=8", "httpx2"]
+# Paid, opt-in. Only needed if you switch on the Claude analysis engine.
+claude = ["anthropic>=2.13"]
+
+[project.scripts]
+disp-evidence = "disp_evidence.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["disp_evidence*"]
+
+[tool.setuptools.package-data]
+disp_evidence = ["web/templates/*.html", "web/static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

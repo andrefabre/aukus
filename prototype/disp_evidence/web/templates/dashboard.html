@@ -1,0 +1,74 @@
+{% extends "base.html" %}{% set active = 'dash' %}
+{% block title %}Dashboard{% endblock %}
+{% block body %}
+<div class="row between pagehead">
+  <div>
+    <h1>Control status</h1>
+    <p class="sub">Collected monthly from the tenant, sealed in write-once storage, and attested by the Security Officer.
+      Latest sealed period <b>{{ latest }}</b>, evidence {{ age_days }} day{{ '' if age_days == 1 else 's' }} old.</p>
+  </div>
+  <div class="row">
+    {% if not current_sealed %}
+    <form method="post" action="/run" data-confirm="Collect all streams for {{ current }} as of now, then hash, sign and seal them? Sealed evidence cannot be changed.">
+      <button class="btn primary">Run {{ current }} cycle now</button>
+    </form>
+    {% else %}<span class="tag">{{ current }} sealed</span>{% endif %}
+    <a class="btn" href="/month/{{ latest }}">Open {{ latest }}</a>
+  </div>
+</div>
+
+<div class="grid tiles">
+  <div class="card tile"><div class="k">Controls at GAP ({{ latest }})</div><div class="v">{{ gaps }} / {{ statuses|length }}</div><div class="d">baseline from collected exceptions</div></div>
+  <div class="card tile"><div class="k">Critical / high exceptions</div><div class="v">{{ open_ex|length }}</div><div class="d">raised in {{ latest }}</div></div>
+  <div class="card tile"><div class="k">Attestations pending</div><div class="v">{{ pending }}</div><div class="d">access review + JML sign-offs, all months</div></div>
+  <div class="card tile"><div class="k">Vault integrity</div>
+    {% set bad = integrity.values()|reject|list|length %}
+    <div class="v {{ 'check-ok' if bad == 0 else 'check-bad' }}">{{ '✓ intact' if bad == 0 else '✕ ' ~ bad ~ ' failed' }}</div>
+    <div class="d">{{ integrity|length }} months hash-chained and signed</div></div>
+</div>
+
+<h2>Evidence streams by month</h2>
+<div class="card wide">
+<table class="heat">
+  <tr><th></th>{% for p in periods %}<th><a href="/month/{{ p }}">{{ p }}</a></th>{% endfor %}</tr>
+  {% for s in streams %}
+  <tr><th class="row">{{ s.number }}. {{ s.name }}{% if s.in_core_scope %} <span class="tag">core</span>{% endif %}</th>
+    {% for p in periods %}{% set sm = grid[p].get(s.stream_id) %}
+      {% if sm %}<td><a class="cell {{ sm.status }}" href="/month/{{ p }}/stream/{{ s.stream_id }}" data-tip="{{ s.short }} {{ p }}: {{ sm.headline }}">{{ icon[sm.status] }} {{ sm.status }}</a></td>
+      {% else %}<td class="empty">-</td>{% endif %}
+    {% endfor %}</tr>
+  {% endfor %}
+</table>
+<div class="legend"><span>✓ PASS - no exceptions above low</span><span>! WARN - medium exceptions</span><span>✕ FAIL - critical/high exceptions</span><span>Hover a cell for the headline; click for the evidence.</span></div>
+</div>
+
+<h2>Trends</h2>
+<div class="grid charts">
+{% for c in charts %}{% set g = c.chart %}
+  <div class="card chart">
+    <div class="head"><h3>{{ c.title }}</h3><span class="big">{{ c.latest if c.latest is not none else '-' }}{% if c.latest is not none %}%{% endif %}</span></div>
+    <svg viewBox="0 0 {{ g.w }} {{ g.h }}" role="img" aria-label="{{ c.title }} by month">
+      {% for t in g.ticks %}<line class="gridline" x1="{{ g.pl }}" x2="{{ g.w - g.pr }}" y1="{{ t.y }}" y2="{{ t.y }}"/>
+      <text class="tick" x="{{ g.pl - 6 }}" y="{{ t.y + 3 }}" text-anchor="end">{{ t.v|int }}</text>{% endfor %}
+      {% for p in g.points %}<text class="tick" x="{{ p.x }}" y="{{ g.h - 6 }}" text-anchor="middle">{{ p.label[5:] }}</text>{% endfor %}
+      <path class="line" d="{{ g.path }}"/>
+      {% for p in g.points %}<circle class="dot" cx="{{ p.x }}" cy="{{ p.y }}" r="4"/>
+      <circle class="hit" cx="{{ p.x }}" cy="{{ p.y }}" r="14" data-tip="{{ p.label }}: {{ p.v }}%"/>{% endfor %}
+    </svg>
+  </div>
+{% endfor %}
+</div>
+
+<h2>Critical and high exceptions, {{ latest }}</h2>
+<div class="card scroll">
+<table>
+  <tr><th>Severity</th><th>Stream</th><th>Exception</th><th>Subject</th><th>Detail</th></tr>
+  {% for e in open_ex %}
+  <tr><td><span class="sev {{ e.severity }}">{{ e.severity }}</span></td>
+      <td><a href="/month/{{ latest }}/stream/{{ e.stream }}">{{ streams_by_id[e.stream].short }}</a></td>
+      <td>{{ e.title }}</td><td class="mono">{{ e.subject }}</td><td>{{ e.detail }}</td></tr>
+  {% else %}<tr><td colspan="5" class="muted">None.</td></tr>{% endfor %}
+</table>
+</div>
+<p class="muted">In production each exception becomes a Planner task assigned to its owner, so it is followed up between monthly reviews.</p>
+{% endblock %}

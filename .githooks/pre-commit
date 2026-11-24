@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# pre-commit guardrail hook. Installed via `git config core.hooksPath .githooks`
+# (see scripts/install-aliases.sh). Blocks:
+#   1. Direct commits to a protected branch without explicit human override.
+#   2. Committing a broken .claude/skills/*/SKILL.md (invalid frontmatter).
+#   3. Committing a shell script with a syntax error.
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+source "$ROOT/scripts/lib/guardrails.sh"
+
+branch="$(guardrail_current_branch)"
+if guardrail_is_protected_branch "$branch" && [[ "${AGENTIC_ALLOW_MAIN_COMMIT:-0}" != "1" ]]; then
+  echo "BLOCKED: direct commit to protected branch '$branch'." >&2
+  echo "Create a feature branch instead, or if this is intentional and a human" >&2
+  echo "has explicitly approved it, re-run with AGENTIC_ALLOW_MAIN_COMMIT=1." >&2
+  exit 1
+fi
+
+skill_files="$(guardrail_staged_skill_files)"
+if [[ -n "$skill_files" ]]; then
+  if ! "$ROOT/scripts/validate-skills.sh"; then
+    echo "BLOCKED: staged SKILL.md has invalid frontmatter (see above)." >&2
+    exit 1
+  fi
+fi
+
+shell_files="$(guardrail_staged_shell_files)"
+if [[ -n "$shell_files" ]]; then
+  errfile="$(mktemp)"
+  trap 'rm -f "$errfile"' EXIT
+  while IFS= read -r f; do
+    [[ -f "$ROOT/$f" ]] || continue
+    if ! bash -n "$ROOT/$f" 2>"$errfile"; then
+      echo "BLOCKED: syntax error in $f:" >&2
+      cat "$errfile" >&2
+      exit 1
+    fi
+  done <<< "$shell_files"
+fi
+
+exit 0

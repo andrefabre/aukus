@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+# squad — CLI for the .squad/ persistence layer (tasks, mailbox, decisions).
+# See .claude/skills/squad-delegate/SKILL.md for the conventions this enforces.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SQUAD="$ROOT/.squad"
+TASKS="$SQUAD/tasks"
+MAILBOX="$SQUAD/mailbox"
+DECISIONS="$SQUAD/DECISIONS.md"
+
+usage() {
+  cat <<'EOF'
+Usage: squad <command> [args]
+
+Commands:
+  status                        Show open tasks, unread mail, recent decisions
+  task add <title>              Create a new [TODO] task file
+  task list [status]            List tasks, optionally filtered by status
+  task done <id>                Mark a task file as [DONE]
+  mail send <from> <to> <msg>   Write a mailbox note
+  mail read                     List and print unread mailbox notes
+  decide <title>                Append a decision stub to DECISIONS.md
+  help                          Show this message
+EOF
+}
+
+next_task_id() {
+  local last
+  last=$(find "$TASKS" -maxdepth 1 -name '[0-9][0-9][0-9]-*.md' -printf '%f\n' 2>/dev/null \
+    | sed -E 's/^([0-9]{3})-.*/\1/' | sort -n | tail -1)
+  printf '%03d' "$(( ${last:-0} + 1 ))"
+}
+
+slugify() {
+  echo "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g'
+}
+
+cmd_task_add() {
+  local title="${1:?Usage: squad task add <title>}"
+  local id slug file today
+  id="$(next_task_id)"
+  slug="$(slugify "$title")"
+  file="$TASKS/${id}-${slug}.md"
+  today="$(date +%Y-%m-%d)"
+  cat > "$file" <<EOF
+---
+status: TODO
+owner: unassigned
+created: ${today}
+---
+
+# [TODO] ${title}
+
+## Goal
+
+
+## Context
+
+
+## Notes
+- ${today}: created.
+EOF
+  echo "Created $file"
+}
+
+cmd_task_list() {
+  local filter="${1:-}"
+  shopt -s nullglob
+  for f in "$TASKS"/[0-9][0-9][0-9]-*.md; do
+    local status
+    status=$(grep -m1 '^status:' "$f" | awk '{print $2}')
+    if [[ -z "$filter" || "${status,,}" == "${filter,,}" ]]; then
+      printf '%-6s %s\n' "[$status]" "$(basename "$f")"
+    fi
+  done
+}
+
+cmd_task_done() {
+  local id="${1:?Usage: squad task done <id>}"
+  local file
+  file=$(find "$TASKS" -maxdepth 1 -name "${id}-*.md" | head -1)
+  [[ -n "$file" ]] || { echo "No task matching id '$id'" >&2; exit 1; }
+  sed -i -E 's/^status: .*/status: DONE/' "$file"
+  sed -i -E 's/^# \[[A-Z_]+\]/# [DONE]/' "$file"
+  echo "Marked done: $file"
+}
+
+cmd_mail_send() {
+  local from="${1:?Usage: squad mail send <from> <to> <message>}"
+  local to="${2:?Usage: squad mail send <from> <to> <message>}"
+  local msg="${3:?Usage: squad mail send <from> <to> <message>}"
+  local stamp file
+  stamp="$(date +%Y%m%d%H%M%S)"
+  file="$MAILBOX/${stamp}-${from}-to-${to}.md"
+  cat > "$file" <<EOF
+From: ${from}
+To: ${to}
+Date: $(date -Iseconds)
+
+${msg}
+EOF
+  echo "Sent $file"
+}
+
+cmd_mail_read() {
+  shopt -s nullglob
+  local found=0
+  for f in "$MAILBOX"/*-to-*.md; do
+    found=1
+    echo "--- $(basename "$f") ---"
+    cat "$f"
+    echo
+  done
+  [[ "$found" -eq 1 ]] || echo "(mailbox empty)"
+}
+
+cmd_decide() {
+  local title="${1:?Usage: squad decide <title>}"
+  local today
+  today="$(date +%Y-%m-%d)"
+  cat >> "$DECISIONS" <<EOF
+
+## ${today} — ${title}
+**Decided by:**
+**Context:**
+**Decision:**
+**Alternatives considered:**
+EOF
+  echo "Appended decision stub to $DECISIONS — fill it in before committing."
+}
+
+cmd_status() {
+  echo "== Open tasks =="
+  cmd_task_list TODO
+  cmd_task_list IN_PROGRESS
+  cmd_task_list BLOCKED
+  echo
+  echo "== Mailbox =="
+  cmd_mail_read
+  echo
+  echo "== Recent decisions =="
+  tail -n 20 "$DECISIONS"
+}
+
+cmd="${1:-help}"; shift || true
+case "$cmd" in
+  status) cmd_status ;;
+  task)
+    sub="${1:?task requires: add|list|done}"; shift || true
+    case "$sub" in
+      add) cmd_task_add "$@" ;;
+      list) cmd_task_list "$@" ;;
+      done) cmd_task_done "$@" ;;
+      *) usage; exit 1 ;;
+    esac
+    ;;
+  mail)
+    sub="${1:?mail requires: send|read}"; shift || true
+    case "$sub" in
+      send) cmd_mail_send "$@" ;;
+      read) cmd_mail_read "$@" ;;
+      *) usage; exit 1 ;;
+    esac
+    ;;
+  decide) cmd_decide "$@" ;;
+  help|-h|--help) usage ;;
+  *) echo "Unknown command: $cmd" >&2; usage; exit 1 ;;
+esac

@@ -1,0 +1,62 @@
+{% extends "base.html" %}{% set active = 'dash' %}
+{% block title %}{{ stream.short }} {{ period }}{% endblock %}
+{% block body %}
+<p><a href="/month/{{ period }}">← {{ period }}</a></p>
+<div class="row between">
+  <div><h1>{{ stream.number }}. {{ stream.name }} · {{ period }}</h1>
+    <p class="sub">{{ stream.description }}</p></div>
+  <span class="pill {{ s.status }}">{{ icon[s.status] }} {{ s.status }}</span>
+</div>
+<div class="card"><b>{{ s.headline }}</b><p class="muted" style="margin:4px 0 0">Sources: {{ s.sources|join(', ') }} · controls: {{ s.control_ids|join(', ') }} · cut-off {{ s.as_of[:16] }} UTC</p></div>
+
+<h2>Metrics</h2>
+<div class="grid tiles">
+{% for k, v in s.metrics.items() %}{% if v is not mapping %}
+  <div class="card tile"><div class="k">{{ k.replace('_', ' ') }}</div><div class="v" style="font-size:20px">{{ v }}</div></div>
+{% endif %}{% endfor %}
+</div>
+
+<h2>Exceptions ({{ exceptions|length }})</h2>
+<div class="card scroll"><table>
+  <tr><th>Id</th><th>Severity</th><th>Control</th><th>Exception</th><th>Subject</th><th>Detail</th></tr>
+  {% for e in exceptions %}<tr><td class="mono">{{ e.exception_id }}</td><td><span class="sev {{ e.severity }}">{{ e.severity }}</span></td>
+    <td>{{ e.control_id }}</td><td>{{ e.title }}</td><td class="mono">{{ e.subject }}</td><td>{{ e.detail }}</td></tr>
+  {% else %}<tr><td colspan="6" class="muted">No exceptions.</td></tr>{% endfor %}
+</table></div>
+
+{% if stream.requires_attestation %}
+<h2 id="attest">Security Officer attestation</h2>
+{% for a in attest %}{% set p = a.payload %}
+<div class="card" style="margin-bottom:8px"><span class="check-ok">✓ #{{ a.seq }} {{ p.decision.replace('_', ' ') }}</span> by {{ p.signed_by }} ({{ p.role }}) at {{ p.signed_at[:16] }} UTC
+  {% if p.comment %}<br>"{{ p.comment }}"{% endif %}
+  <br><span class="muted mono">bound to manifest {{ p.manifest_sha256 }}</span></div>
+{% endfor %}
+<div class="card teams">
+  <div class="from">Microsoft Teams · Approvals (simulated) · to {{ so_name }}</div>
+  <h3>Approval requested: {{ stream.name }} for {{ period }}</h3>
+  <p style="margin:4px 0 10px">I have reviewed the {{ exceptions|length }} exception(s) above and confirm this record reflects access in the period.
+    Your decision is signed, bound to this month's sealed manifest and appended to the vault. It cannot be edited afterwards.</p>
+  <form method="post" action="/month/{{ period }}/stream/{{ stream.stream_id }}/attest">
+    <textarea name="comment" placeholder="Comment (required for 'approve with comments' or 'reject')"></textarea>
+    <div class="row" style="margin-top:8px">
+      <button class="btn primary" name="decision" value="approved">Approve</button>
+      <button class="btn" name="decision" value="approved_with_comments">Approve with comments</button>
+      <button class="btn danger" name="decision" value="rejected">Reject</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+<h2>Sealed artifacts</h2>
+<div class="card wide"><table>
+  <tr><th>Artifact</th><th>SHA-256</th><th class="num">Bytes</th></tr>
+  {% for a in artifacts %}<tr><td><a href="/artifact?id={{ a.artifact_id|urlencode }}" target="_blank">{{ a.artifact_id }}</a></td>
+    <td class="mono">{{ a.sha256 }}</td><td class="num">{{ a.bytes }}</td></tr>{% endfor %}
+</table></div>
+
+<h2>Records ({{ total_records }}{% if total_records > records|length %}, first {{ records|length }} shown{% endif %})</h2>
+{% if records %}<div class="card scroll"><table>
+  <tr>{% for k in records[0].keys() %}<th>{{ k.replace('_', ' ') }}</th>{% endfor %}</tr>
+  {% for r in records %}<tr>{% for v in r.values() %}<td>{{ v }}</td>{% endfor %}</tr>{% endfor %}
+</table></div>{% else %}<p class="muted">No records.</p>{% endif %}
+{% endblock %}
