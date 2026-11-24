@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# fleet — non-interactive wrapper around GitHub Copilot CLI's /fleet parallel-agent mode.
+#
+# Usage:
+#   bin/fleet "<self-contained goal>"   Dispatch a goal to /fleet in the background
+#   bin/fleet status                    Show recent fleet runs and their log tails
+#   bin/fleet logs <run-id>             Print the full log for a run
+#
+# Design notes:
+#   - Fleet subagents don't inherit any chat history, so the goal string must be
+#     self-contained (see .claude/commands/fleet-run.md).
+#   - Runs non-interactively via `copilot -p ... --allow-all-tools --no-ask-user`,
+#     verified against `copilot --help` (Copilot CLI 1.0.10) rather than assumed.
+#   - Every run is logged under .squad/logs/ so `squad status`-adjacent tooling and
+#     humans can inspect what an autonomous fleet run actually did.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+LOGDIR="$ROOT/.squad/logs"
+mkdir -p "$LOGDIR"
+
+require_copilot() {
+  if ! command -v copilot >/dev/null 2>&1; then
+    echo "error: 'copilot' CLI not found on PATH. Install GitHub Copilot CLI first:" >&2
+    echo "  https://docs.github.com/copilot/how-tos/copilot-cli" >&2
+    exit 1
+  fi
+}
+
+cmd_run() {
+  local goal="${1:?Usage: fleet \"<self-contained goal>\"}"
+  require_copilot
+  local run_id log
+  run_id="$(date +%Y%m%d%H%M%S)"
+  log="$LOGDIR/fleet-${run_id}.log"
+
+  echo "Dispatching to Copilot CLI /fleet (run ${run_id})..."
+  echo "Log: $log"
+
+  # --allow-all-tools + --no-ask-user: required for genuinely non-interactive,
+  # unattended execution (per `copilot --help`). This trades human-in-the-loop
+  # confirmation for autonomy — only use bin/fleet for goals you'd be comfortable
+  # letting run unattended; anything destructive still has to clear the repo's
+  # git-guardrails hooks regardless.
+  nohup copilot \
+    -p "/fleet ${goal}" \
+    --allow-all-tools \
+    --no-ask-user \
+    --log-dir "$LOGDIR" \
+    > "$log" 2>&1 &
+
+  local pid=$!
+  echo "$pid" > "$LOGDIR/fleet-${run_id}.pid"
+  echo "Started (pid $pid). Check progress with: bin/fleet status"
+}
+
+cmd_status() {
+  shopt -s nullglob
+  local logs=("$LOGDIR"/fleet-*.log)
+  if [[ ${#logs[@]} -eq 0 ]]; then
+    echo "No fleet runs yet."
+    return
+  fi
+  for log in "${logs[@]}"; do
+    local run_id pidfile pid state
+    run_id="$(basename "$log" .log | sed 's/^fleet-//')"
+    pidfile="$LOGDIR/fleet-${run_id}.pid"
+    pid="$(cat "$pidfile" 2>/dev/null || echo '?')"
+    if [[ "$pid" != "?" ]] && kill -0 "$pid" 2>/dev/null; then
+      state="running"
+    else
+      state="finished"
+    fi
+    echo "=== run $run_id ($state, pid $pid) ==="
+    tail -n 5 "$log"
+    echo
+  done
+}
+
+cmd_logs() {
+  local run_id="${1:?Usage: fleet logs <run-id>}"
+  local log="$LOGDIR/fleet-${run_id}.log"
+  [[ -f "$log" ]] || { echo "No such run: $run_id" >&2; exit 1; }
+  cat "$log"
+}
+
+case "${1:-}" in
+  status) cmd_status ;;
+  logs) shift; cmd_logs "$@" ;;
+  ""|-h|--help)
+    sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+    ;;
+  *) cmd_run "$1" ;;
+esac

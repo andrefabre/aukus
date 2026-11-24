@@ -1,0 +1,33 @@
+{% extends "base.html" %}{% set active = 'conn' %}
+{% block title %}Connectors &amp; costs{% endblock %}
+{% block body %}
+<h1>Connectors, permissions &amp; costs</h1>
+<p class="sub">Connector mode: <b>{{ mode }}</b>. The demo reads a deterministic simulated tenant. The Microsoft Graph connector is in the code
+  (<code>connectors/graph.py</code>) but has not yet been run against a real tenant.</p>
+
+<h2>Published permission map (read-only)</h2>
+<div class="card wide"><table>
+  <tr><th>Stream</th><th>Source</th><th>Permission</th><th>Evidence produced</th></tr>
+  {% for p in permissions %}<tr><td>{{ streams_by_id[p.stream].short if p.stream in streams_by_id else p.stream }}</td><td class="mono">{{ p.source }}</td><td class="mono">{{ p.permission }}</td><td>{{ p.evidence }}</td></tr>{% endfor %}
+</table></div>
+<p class="muted">The client can revoke the app registration and Lighthouse delegation at any time. No write permissions are requested.</p>
+
+<h2>Analysis engines</h2>
+<div class="card wide"><table>
+  <tr><th>Engine</th><th>Available</th><th>Cost</th><th>Notes</th></tr>
+  <tr><td>rules</td><td>{{ '✓' if engines.rules[0] else '✕' }}</td><td>$0</td><td>{{ engines.rules[1] }}</td></tr>
+  <tr><td>ollama</td><td>{{ '✓' if engines.ollama[0] else '✕' }}</td><td>$0 (local)</td><td>{{ engines.ollama[1] }}</td></tr>
+  <tr><td>claude</td><td>{{ '✓' if engines.claude[0] else '✕' }}</td><td><b>Paid per token</b></td><td>{{ engines.claude[1] }}</td></tr>
+</table></div>
+
+<h2>What this demo costs to run</h2>
+<div class="card wide"><table>
+  <tr><th>Component</th><th>In this demo</th><th>In production (per client, per the business case)</th></tr>
+  <tr><td>Data source</td><td>Simulated tenant, $0</td><td>Client's existing M365 licences</td></tr>
+  <tr><td>Collectors / scheduler</td><td>Python on this laptop, $0</td><td>Azure Functions timer, about A$5-20/month, billed to the client's subscription</td></tr>
+  <tr><td>Evidence store</td><td>Local read-only files, $0</td><td>Azure Blob with an immutability policy, in the client's subscription</td></tr>
+  <tr><td>Signing key</td><td>Ed25519 key on disk, $0</td><td>Azure Key Vault key, signed via managed identity</td></tr>
+  <tr><td>Dashboard</td><td>This web app, $0</td><td>Power BI (client licence)</td></tr>
+  <tr><td>AI analysis</td><td>Rules ($0) or Ollama ($0)</td><td>Optional. A hosted LLM is billed per token, and it moves data out of the tenant</td></tr>
+</table></div>
+{% endblock %}

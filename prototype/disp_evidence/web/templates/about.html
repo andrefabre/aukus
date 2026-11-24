@@ -1,0 +1,37 @@
+{% extends "base.html" %}{% set active = 'about' %}
+{% block title %}How it works{% endblock %}
+{% block body %}
+<h1>How it works</h1>
+<p class="sub">Each month the same pipeline runs inside the client's tenant: collect, seal, analyse, sign off, then produce the pack. Evidence only moves forward through these stages.</p>
+<div class="flow">
+  <div class="step"><b>1 · Collect</b>Read-only collectors pull Entra ID, Intune / Defender, HR, training, visitor and incident data at month end.</div>
+  <div class="step"><b>2 · Seal</b>Each artifact is SHA-256 hashed. The manifest is signed and chained to the previous month, and files are written once.</div>
+  <div class="step"><b>3 · Analyse</b>The rules engine, or an optional LLM, drafts the control assessment. A deterministic gate rejects invented or over-claimed evidence.</div>
+  <div class="step"><b>4 · Attest</b>The Security Officer approves or rejects in a Teams-style card. The decision is signed and appended to that month.</div>
+  <div class="step"><b>5 · Report</b>A monthly PDF + JSON evidence pack, the dashboard and the ASR data pack. Exceptions become Planner tasks.</div>
+</div>
+
+<h2>Prototype component → production component</h2>
+<div class="card wide"><table>
+  <tr><th>Layer</th><th>This prototype (local, $0)</th><th>Production (business case §6–7)</th></tr>
+  <tr><td>Source access</td><td>Simulated tenant behind a <code>Connector</code> interface; Graph connector included</td><td>Entra app registration (cert auth, read-only Graph scopes) + Azure Lighthouse</td></tr>
+  <tr><td>Collection</td><td><code>python -m disp_evidence run</code> / "Run cycle" button</td><td>Azure Functions timer trigger, Durable Functions fan-out</td></tr>
+  <tr><td>Long-horizon logs</td><td>Simulated full-year timeline</td><td>Entra diagnostic settings → Log Analytics (beyond 30 days)</td></tr>
+  <tr><td>Evidence store</td><td>Read-only files, exclusive create, ordered sealing</td><td>Azure Blob immutable (WORM) time-based retention + versioning</td></tr>
+  <tr><td>Integrity</td><td>SHA-256 manifest, Ed25519 signature, monthly hash chain, signed addenda</td><td>Same, with the signature from a Key Vault key</td></tr>
+  <tr><td>Attestation</td><td>Teams-style approval card in this UI</td><td>Power Automate Teams approval or Entra Access Reviews (P2)</td></tr>
+  <tr><td>Analysis</td><td>Rules engine; optional Ollama / Claude; citation + over-claim gate</td><td>Same gate; LLM optional (keeps the "data stays in tenant" promise only if local/private)</td></tr>
+  <tr><td>Reporting</td><td>This dashboard; fpdf2 PDF + JSON packs; ASR roll-up</td><td>Power BI; Function-rendered PDF; Planner tasks for exceptions</td></tr>
+</table></div>
+
+<h2>Demo talk track (5 minutes)</h2>
+<ol>
+  <li><b>Dashboard</b>: six sealed months. Point at the red cells, then hover for the headline.</li>
+  <li>Open the <b>latest month → JML</b>. The leaver whose account was never disabled is a critical exception, so the Security Officer signs off with comments.</li>
+  <li><b>Control analysis</b>: draft an assessment. The gate passes, and the Security Officer approves it and it is sealed. Then run the <i>faulty-llm-demo</i> engine and watch the gate block the invented citation and over-claim.</li>
+  <li><b>Evidence pack PDF</b>: show the manifest hash, chain, signature and integrity check that an assessor can rely on.</li>
+  <li><b>Vault → Tamper</b>: change "LATE" to "on time" in a sealed JML file. Integrity flips to FAILED, which shows the evidence can't be quietly fixed later. Then restore it.</li>
+  <li><b>Run this month's cycle now</b>: a new month is collected, hashed, signed and chained in about a second.</li>
+  <li><b>ASR data pack</b>: the year's evidence for the Annual Security Report, already assembled.</li>
+</ol>
+{% endblock %}

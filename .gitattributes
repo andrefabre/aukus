@@ -1,0 +1,7 @@
+# Force LF for anything executed as a script or hook — CRLF here breaks the
+# #!/usr/bin/env bash shebang ("bad interpreter") on checkout on Windows,
+# since core.autocrlf=true would otherwise rewrite these to CRLF.
+bin/* text eol=lf
+.githooks/* text eol=lf
+scripts/* text eol=lf
+*.sh text eol=lf

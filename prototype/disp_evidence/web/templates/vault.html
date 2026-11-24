@@ -1,0 +1,44 @@
+{% extends "base.html" %}{% set active = 'vault' %}
+{% block title %}Evidence vault{% endblock %}
+{% block body %}
+<h1>Evidence vault</h1>
+<p class="sub">Write-once monthly folders. Each manifest lists the SHA-256 hash of every artifact and is signed with key <code>{{ key_id }}</code>.
+  Each manifest also carries the hash of the previous month's manifest, so later edits are detectable. Integrity is re-checked live on every page load.
+  <br><span class="muted">Local path: <code>{{ vault_dir }}</code> (emulates Azure Blob immutable storage)</span></p>
+
+<div class="card wide"><table>
+  <tr><th>Period</th><th>Cut-off</th><th>Sealed</th><th class="num">Artifacts</th><th>Manifest SHA-256</th><th>Chained to</th><th class="num">Addenda</th><th>Integrity</th></tr>
+  {% for r in rows %}<tr>
+    <td class="nowrap"><a href="/month/{{ r.period }}">{{ r.period }}</a></td><td class="nowrap">{{ r.m.as_of[:10] }}</td><td class="nowrap">{{ r.m.sealed_at[:16].replace("T", " ") }}</td>
+    <td class="num">{{ r.m.artifacts|length }}</td><td class="mono">{{ r.sha[:20] }}…</td>
+    <td class="mono">{% if r.m.prev_period %}{{ r.m.prev_period }} · {{ r.m.prev_manifest_sha256[:12] }}…{% else %}genesis{% endif %}</td>
+    <td class="num">{{ r.addenda|length }}</td>
+    <td>{% if r.verify.ok %}<span class="check-ok">✓ verified</span>{% else %}<span class="check-bad">✕ FAILED</span>
+      {% for c in r.verify.checks %}{% if not c.ok %}<br><span class="muted">{{ c.check }}: {{ c.detail }}</span>{% endif %}{% endfor %}{% endif %}</td>
+  </tr>{% endfor %}
+</table></div>
+
+<h2>Tamper-evidence demo</h2>
+<div class="grid cards">
+  <div class="card">
+    <h3>Simulate an insider edit</h3>
+    <p>Edits one row of a sealed <code>records.csv</code> outside the vault's write-once API, for example to turn a late leaver removal into "on time".
+      The next integrity check flags the changed hash.</p>
+    <form method="post" action="/vault/tamper" class="row" data-confirm="Edit sealed evidence behind the vault's back (demo)?">
+      <select name="period">{% for r in rows %}<option>{{ r.period }}</option>{% endfor %}</select>
+      <select name="stream">{% for s in streams %}<option value="{{ s.stream_id }}" {% if s.stream_id == 'jml' %}selected{% endif %}>{{ s.short }}</option>{% endfor %}</select>
+      <button class="btn danger">Tamper</button>
+    </form>
+  </div>
+  <div class="card">
+    <h3>Restore (demo reset)</h3>
+    {% if tampered %}{% for p, s in tampered %}
+      <form method="post" action="/vault/untamper" class="row" style="margin-bottom:6px">
+        <input type="hidden" name="period" value="{{ p }}"><input type="hidden" name="stream" value="{{ s }}">
+        <span>{{ p }} / {{ s }}</span><button class="btn">Restore original</button>
+      </form>{% endfor %}
+    {% else %}<p class="muted">Nothing tampered.</p>{% endif %}
+    <p class="muted">In Azure, an immutability policy blocks the edit itself. Here the file is read-only, and the signed hash chain is the second line of defence.</p>
+  </div>
+</div>
+{% endblock %}

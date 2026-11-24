@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% set active = 'dash' %}
+{% block body %}
+<h1>No evidence sealed yet</h1>
+<p class="sub">Seed the demo from a terminal in the <code>prototype</code> folder:</p>
+<pre class="card mono">python -m disp_evidence demo-setup</pre>
+<p class="sub">Or run just the current month now (collect, hash, sign and seal):</p>
+<form method="post" action="/run"><button class="btn primary">Run monthly cycle now</button></form>
+{% endblock %}

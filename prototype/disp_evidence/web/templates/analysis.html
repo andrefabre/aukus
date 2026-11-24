@@ -1,0 +1,64 @@
+{% extends "base.html" %}{% set active = 'dash' %}
+{% block title %}Analysis {{ period }}{% endblock %}
+{% block body %}
+<p><a href="/month/{{ period }}">← {{ period }}</a></p>
+<h1>Control analysis · {{ period }}</h1>
+<p class="sub">Deterministic first, agent second, gate always. An engine drafts the control assessment from the sealed evidence.
+  A deterministic gate then rejects invented citations and any rating better than the evidence supports. Only the Security Officer can approve it.</p>
+
+<div class="card">
+  <form method="post" action="/month/{{ period }}/analysis/run" class="row">
+    <label for="engine"><b>Engine</b></label>
+    <select name="engine" id="engine">
+      {% for name, st in engines.items() %}<option value="{{ name }}" {% if not st[0] %}disabled{% endif %}>{{ name }}{% if not st[0] %} (unavailable){% endif %}</option>{% endfor %}
+    </select>
+    <button class="btn primary">Draft assessment</button>
+  </form>
+  <ul style="margin:10px 0 0; padding-left:18px">
+    {% for name, st in engines.items() %}<li><b>{{ name }}</b>: {{ st[1] }}</li>{% endfor %}
+  </ul>
+</div>
+
+{% if approved %}{% set ap = approved.payload %}
+<h2>Approved assessment</h2>
+<div class="card"><span class="check-ok">✓ Approved by {{ ap.approved_by }}</span> at {{ approved.recorded_at[:16] }} UTC · engine {{ ap.draft.engine }} ·
+  sealed as vault addendum #{{ approved.seq }}{% if ap.comment %} · "{{ ap.comment }}"{% endif %}</div>
+{% endif %}
+
+{% if draft %}{% set d = draft.draft %}{% set g = draft.gate %}
+<h2>Latest draft</h2>
+<div class="draft-banner">DRAFT - PENDING SO REVIEW · produced by {{ d.engine }} at {{ d.generated_at_utc[:16] }} · requires human sign-off</div>
+
+<div class="card">
+  <h3>Gate: {% if g.passed %}<span class="check-ok">✓ passed</span>{% else %}<span class="check-bad">✕ failed - cannot be approved</span>{% endif %}</h3>
+  {% if g.findings %}<ul style="margin:6px 0 0; padding-left:18px">{% for f in g.findings %}
+    <li><span class="{{ 'check-bad' if f.level == 'error' else 'muted' }}">{{ f.level }}</span> · {{ f.control_id }} · {{ f.message }}</li>{% endfor %}</ul>
+  {% else %}<p class="muted" style="margin:4px 0 0">Every citation exists in the sealed vault and no control is rated above the deterministic baseline.</p>{% endif %}
+</div>
+
+<div class="card wide" style="margin-top:12px"><table>
+  <tr><th>Control</th><th>Draft status</th><th>Baseline</th><th class="num">Conf.</th><th>Rationale</th><th>Recommended action</th><th>Cited evidence</th></tr>
+  {% for a in d.assessments %}<tr>
+    <td><b>{{ a.control_id }}</b>{% if controls_by_id.get(a.control_id) %}<br><span class="muted">{{ controls_by_id[a.control_id].name }}</span>{% endif %}</td>
+    <td><span class="pill {{ a.status }}">{{ icon[a.status] }} {{ a.status }}</span></td>
+    <td>{% if statuses.get(a.control_id) %}<span class="pill {{ statuses[a.control_id] }}">{{ statuses[a.control_id] }}</span>{% endif %}</td>
+    <td class="num">{{ '%.2f'|format(a.confidence) }}</td><td>{{ a.rationale }}</td><td>{{ a.recommended_action }}</td>
+    <td>{% for c in a.cited_artifact_ids %}<a class="mono" href="/artifact?id={{ c|urlencode }}" target="_blank">{{ c }}</a><br>{% endfor %}</td></tr>{% endfor %}
+</table></div>
+
+{% if d.open_questions_for_so %}<h2>Open questions for the Security Officer</h2>
+<div class="card"><ul style="margin:0; padding-left:18px">{% for q in d.open_questions_for_so %}<li>{{ q }}</li>{% endfor %}</ul></div>{% endif %}
+
+<h2>Approve</h2>
+<div class="card teams">
+  <div class="from">Microsoft Teams · Approvals (simulated) · to {{ so_name }}</div>
+  <form method="post" action="/month/{{ period }}/analysis/approve" data-confirm="Approve this draft? It will be signed and appended to the vault for {{ period }}.">
+    <textarea name="comment" placeholder="Optional comment"></textarea>
+    <div class="row" style="margin-top:8px"><button class="btn primary" {% if not g.passed %}disabled{% endif %}>Approve as Security Officer</button>
+      {% if not g.passed %}<span class="check-bad">Gate failed - fix or re-run before approval.</span>{% endif %}</div>
+  </form>
+</div>
+{% else %}
+<p class="muted" style="margin-top:16px">No draft yet. Choose an engine and draft an assessment.</p>
+{% endif %}
+{% endblock %}

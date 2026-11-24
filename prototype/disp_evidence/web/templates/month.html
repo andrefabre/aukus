@@ -1,0 +1,51 @@
+{% extends "base.html" %}{% set active = 'dash' %}
+{% block title %}{{ period }}{% endblock %}
+{% block body %}
+<div class="row between">
+  <div>
+    <h1>Evidence for {{ period }}</h1>
+    <p class="sub">Cut-off {{ manifest.as_of[:16] }} UTC · sealed {{ manifest.sealed_at[:16] }} UTC ·
+      {% if verify.ok %}<span class="check-ok">✓ integrity verified</span>{% else %}<span class="check-bad">✕ integrity check failed</span> - <a href="/vault">see vault</a>{% endif %}</p>
+  </div>
+  <div class="row">
+    <select onchange="location='/month/'+this.value">{% for p in periods|reverse %}<option {% if p == period %}selected{% endif %}>{{ p }}</option>{% endfor %}</select>
+    <a class="btn" href="/month/{{ period }}/analysis">Control analysis {% if approved %}✓{% endif %}</a>
+    <a class="btn primary" href="/pack/{{ period }}.pdf" target="_blank">Evidence pack (PDF)</a>
+    <a class="btn" href="/pack/{{ period }}.json" target="_blank">JSON</a>
+  </div>
+</div>
+
+<div class="card"><dl class="kv">
+  <dt>Manifest SHA-256</dt><dd class="mono">{{ manifest_sha }}</dd>
+  <dt>Chained to</dt><dd class="mono">{% if manifest.prev_period %}{{ manifest.prev_period }} · {{ manifest.prev_manifest_sha256 }}{% else %}genesis period{% endif %}</dd>
+  <dt>Signed with</dt><dd>Ed25519 key {{ manifest.key_id }} (local stand-in for Azure Key Vault)</dd>
+  <dt>WORM retention</dt><dd>until {{ manifest.retain_until }} · {{ manifest.artifacts|length }} artifacts</dd>
+</dl></div>
+
+<h2>Streams</h2>
+<div class="grid cards">
+{% for s in streams %}{% set sm = sums.get(s.stream_id) %}{% if sm %}
+  <div class="card">
+    <div class="row between"><h3><a href="/month/{{ period }}/stream/{{ s.stream_id }}">{{ s.number }}. {{ s.name }}</a></h3>
+      <span class="pill {{ sm.status }}">{{ icon[sm.status] }} {{ sm.status }}</span></div>
+    <p style="margin:4px 0 8px">{{ sm.headline }}</p>
+    <div class="row" style="gap:6px">
+      {% for k, n in sev[s.stream_id].items() %}{% if n %}<span class="sev {{ k }}">{{ n }} {{ k }}</span>{% endif %}{% endfor %}
+      {% if not sm.exceptions %}<span class="muted">no exceptions</span>{% endif %}
+    </div>
+    {% if s.requires_attestation %}
+      <p style="margin:10px 0 0">{% if attest.get(s.stream_id) %}{% set a = attest[s.stream_id].payload %}
+        <span class="check-ok">✓ Attested</span> by {{ a.signed_by }} · {{ a.decision.replace('_', ' ') }} · {{ a.signed_at[:10] }}
+      {% else %}<span class="check-bad">Awaiting Security Officer attestation</span> · <a href="/month/{{ period }}/stream/{{ s.stream_id }}#attest">review &amp; sign</a>{% endif %}</p>
+    {% endif %}
+  </div>
+{% endif %}{% endfor %}
+</div>
+
+<h2>Controls</h2>
+<div class="card wide"><table>
+  <tr><th>Control</th><th>Framework</th><th>Stream</th><th>Status as at cut-off</th></tr>
+  {% for c in controls %}<tr><td><b>{{ c.control_id }}</b><br><span class="muted">{{ c.name }}</span></td><td>{{ c.framework }}<br><span class="muted">{{ c.reference }}</span></td>
+    <td>{{ streams_by_id[c.stream].short }}</td><td><span class="pill {{ statuses[c.control_id] }}">{{ icon[statuses[c.control_id]] }} {{ statuses[c.control_id] }}</span></td></tr>{% endfor %}
+</table></div>
+{% endblock %}

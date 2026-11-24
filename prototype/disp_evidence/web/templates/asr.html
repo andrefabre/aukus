@@ -1,0 +1,49 @@
+{% extends "base.html" %}{% set active = 'asr' %}
+{% block title %}ASR data pack{% endblock %}
+{% block body %}
+{% set ps = asr.reporting_periods %}
+<div class="row between">
+  <div><h1>ASR data pack · {{ ps[0] }} to {{ ps[-1] }}</h1>
+    <p class="sub">An annual roll-up of the sealed monthly evidence, for the Security Officer to use when completing the Annual Security Report in the DISP Member Portal.</p></div>
+  <div class="row"><a class="btn primary" href="/asr.pdf" target="_blank">Download PDF</a><a class="btn" href="/asr.json" target="_blank">JSON</a></div>
+</div>
+
+<h2>Control status by month</h2>
+<div class="card wide"><table class="heat">
+  <tr><th></th>{% for p in ps %}<th>{{ p }}</th>{% endfor %}</tr>
+  {% for c in controls %}<tr><th class="row">{{ c.control_id }}</th>
+    {% for p in ps %}{% set st = asr.control_status_by_month[p][c.control_id] %}
+    <td><span class="pill {{ st }}" style="width:100%;justify-content:center">{{ icon[st] }} {{ st }}</span></td>{% endfor %}</tr>{% endfor %}
+</table></div>
+
+<h2>Trends</h2>
+<div class="card wide"><table>
+  <tr><th>Measure</th>{% for p in ps %}<th class="num">{{ p }}</th>{% endfor %}</tr>
+  {% for k, vals in asr.trends.items() %}<tr><td>{{ k.replace('_', ' ') }}</td>{% for v in vals %}<td class="num">{{ v if v is not none else '-' }}</td>{% endfor %}</tr>{% endfor %}
+  {% for s in ['critical', 'high', 'medium', 'low'] %}<tr><td>exceptions: {{ s }}</td>{% for p in ps %}<td class="num">{{ asr.exceptions_by_month[p].get(s, 0) }}</td>{% endfor %}</tr>{% endfor %}
+</table></div>
+
+<div class="grid cards" style="margin-top:12px">
+  <div class="card"><h3>Personnel changes</h3><dl class="kv">{% for k, v in asr.personnel_changes.items() %}<dt>{{ k.replace('_', ' ') }}</dt><dd>{{ v }}</dd>{% endfor %}</dl></div>
+  <div class="card"><h3>Attestations &amp; integrity</h3><table>
+    <tr><th>Period</th><th>Missing sign-off</th><th>Integrity</th></tr>
+    {% for a in asr.attestations %}<tr><td>{{ a.period }}</td><td>{{ a.missing|join(', ') or '-' }}</td>
+      <td>{% if asr.integrity[a.period] %}<span class="check-ok">✓</span>{% else %}<span class="check-bad">✕</span>{% endif %}</td></tr>{% endfor %}
+  </table></div>
+</div>
+
+<h2>Security incidents</h2>
+<div class="card wide"><table>
+  <tr><th>Id</th><th>Date</th><th>Category</th><th>Reportable</th><th>Reported</th><th>Summary</th></tr>
+  {% for i in asr.incidents %}<tr><td>{{ i.id }}</td><td>{{ i.date }}</td><td>{{ i.category }}</td><td>{{ i.reportable }}</td><td>{{ i.reported_on or '-' }}</td><td>{{ i.summary }}</td></tr>
+  {% else %}<tr><td colspan="6" class="muted">None logged.</td></tr>{% endfor %}
+</table></div>
+
+<h2>Persistent critical / high findings (3+ months)</h2>
+<div class="card wide"><table>
+  <tr><th>Stream</th><th>Finding</th><th>Subject</th><th class="num">Months</th></tr>
+  {% for x in asr.persistent_critical_high %}<tr><td>{{ streams_by_id[x.stream].short }}</td><td>{{ x.title }}</td><td class="mono">{{ x.subject }}</td><td class="num">{{ x.months }}</td></tr>
+  {% else %}<tr><td colspan="4" class="muted">None.</td></tr>{% endfor %}
+</table></div>
+<p class="muted">{{ asr.notes|join(' ') }}</p>
+{% endblock %}
